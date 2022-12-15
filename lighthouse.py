@@ -14,8 +14,13 @@ load_dotenv()
 
 LOG_FORMAT = '%(asctime)s - %(levelname)s - %(message)s - %(funcName)s'
 BOT_TOKEN = os.getenv('BOT_TOKEN')
+ID_ADMIN = os.getenv('ID_ADMIN')
 MIN_PICTURE = 5335
 MAX_PICTURE = 5350
+
+
+def massage_error(context, tx_err):
+    context.bot.send_message(chat_id=ID_ADMIN, text=tx_err)
 
 
 def wake_up(update, context):
@@ -25,15 +30,19 @@ def wake_up(update, context):
     bot_name = context.bot.first_name
 
     button = [['загрузить файл']]
-    rep_mar = ReplyKeyboardMarkup(
+    re_mar = ReplyKeyboardMarkup(
         button, one_time_keyboard=True, resize_keyboard=True)
-    text = '{} готов к работе!'.format(bot_name)
+    tx = '{} готов к работе!'.format(bot_name)
 
     try:
-        context.bot.send_message(chat_id=chat.id, text=text, reply_markup=rep_mar)
+        context.bot.send_message(chat_id=chat.id, text=tx, reply_markup=re_mar)
     except Exception:
-        logger.error('Ошибка отправки приветственного сообщения')
-        raise Exception('Ошибка при отправке приветствия')
+        tx_err = 'Ошибка отправки приветственного сообщения'
+        logger.error(tx_err)
+        massage_error(context, tx_err)
+        raise Exception(tx_err)
+    finally:
+        massage_error(context, 'Кто-то запустил бота :)')
 
 
 def text_click(update, context):
@@ -44,14 +53,16 @@ def text_click(update, context):
         if update.message.text == 'загрузить файл':
             name = update.message.chat.first_name
 
-            text = f'{name}, прикрепи файл в формате xlsx и отправь мне :)'
-            context.bot.send_message(chat_id=chat.id, text=text)
+            tx = f'{name}, прикрепи файл в формате xlsx и отправь мне :)'
+            context.bot.send_message(chat_id=chat.id, text=tx)
         else:
-            text = 'Выбери кнопку "загрузить файл"'
-            context.bot.send_message(chat_id=chat.id, text=text)
+            tx = 'Выбери кнопку "загрузить файл"'
+            context.bot.send_message(chat_id=chat.id, text=tx)
     except Exception:
-        logger.error('Ошибка отправки сообщения')
-        raise Exception('Ошибка отправки сообщения')
+        tx_err = 'Ошибка отправки сообщения'
+        logger.error(tx_err)
+        massage_error(context, tx_err)
+        raise Exception(tx_err)
 
 
 def reed_file_xlsx(user_name, file_name):
@@ -66,13 +77,11 @@ def reed_file_xlsx(user_name, file_name):
         raise Exception('Ошибка преобразования xlsx документа')
 
     for line in range(len(sheetX)):
-       delta = []
+        delta = []
+        for name_column in name_columns:
+            delta.append(sheetX[name_column][line])
+        result_arr.append(delta)
 
-       for name_column in name_columns:
-           delta.append(sheetX[name_column][line])
-       result_arr.append(delta)
-
-    logger.info('Массив данных для записи в БД создан')
     return result_arr
 
 
@@ -82,9 +91,9 @@ def write_file_xlsx_database(result_arr):
     conn = sqlite3.connect("db.sqlite3")
     curs = conn.cursor()
     curs.execute("""CREATE TABLE IF NOT EXISTS ParsingData(
-                     id INTEGER PRIMARY KEY, 
-                     Name TEXT, 
-                     URL TEXT, 
+                     id INTEGER PRIMARY KEY,
+                     Name TEXT,
+                     URL TEXT,
                      Xpath TEXT,
                      UNIQUE (Name, URL, Xpath));""")
     for row in result_arr:
@@ -94,7 +103,8 @@ def write_file_xlsx_database(result_arr):
             raise IndexError('Проверить данные входного файла ' +
                              'Должно быть три столбца(name, URL, xPath)')
         try:
-            curs.execute("INSERT INTO ParsingData VALUES (NULL, ?, ?, ?);", to_db)
+            curs.execute(
+                "INSERT INTO ParsingData VALUES (NULL, ?, ?, ?);", to_db)
         except sqlite3.IntegrityError:
             pass
     logger.info('Данные успешно записаны в БД')
@@ -129,19 +139,20 @@ def format_data_list(arr):
 
 
 def send_message(update, context, massage):
-    """Функция отправки сообщений в Telegram чат."""
+    """Функция отправки присланных данных в Telegram чат."""
 
     chat = update.effective_chat
     try:
         for i in massage:
             context.bot.send_message(chat_id=chat.id, text=massage[i])
             time.sleep(3)
-
-        context.bot.send_photo(
-            chat_id=chat.id, photo=open(
-                f'pictures/IMG_{random.randint(MIN_PICTURE, MAX_PICTURE)}.jpg', 'rb'))
     except Exception:
-        raise Exception('Ошибка отправки сообщения')
+        raise Exception('Ошибка отправки присланных данных')
+
+    picture_random = random.randint(MIN_PICTURE, MAX_PICTURE)
+    context.bot.send_photo(
+        chat_id=chat.id, photo=open(
+            f'pictures/IMG_{picture_random}.jpg', 'rb'))
 
 
 def main_handler_file_xlsx(update, context):
@@ -159,14 +170,16 @@ def main_handler_file_xlsx(update, context):
 
         send_message(update, context, massage)
     except Exception as err:
+        tx_err = 'Ошибка в главном обработчике xlsx документа'
         logger.error(err)
-        raise Exception('Ошибка в главном обработчике xlsx документа')
+        massage_error(context, tx_err)
+        raise Exception(tx_err)
 
 
 def check_tokens():
     """Проверка доступности переменных окружения."""
 
-    return BOT_TOKEN
+    return all([BOT_TOKEN, ID_ADMIN])
 
 
 def main():
@@ -190,7 +203,7 @@ def main():
         Filters.document.file_extension("xlsx"), main_handler_file_xlsx)
     dispatcher.add_handler(xlsx_handler)
 
-    updater.start_polling(poll_interval=5)
+    updater.start_polling(poll_interval=10)
     updater.idle()
 
 
