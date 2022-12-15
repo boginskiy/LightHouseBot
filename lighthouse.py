@@ -1,9 +1,11 @@
 import os
+import sys
 from telegram.ext import Updater, MessageHandler, CommandHandler, Filters
-from telegram import ReplyKeyboardMarkup, Bot, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import ReplyKeyboardMarkup
 from dotenv import load_dotenv
 import pandas as pd
 import logging
+from logging import FileHandler, StreamHandler
 import sqlite3
 import random
 import time
@@ -17,52 +19,60 @@ MAX_PICTURE = 5350
 
 
 def wake_up(update, context):
-    """Старт чат бота. Кнопки управления"""
+    """Отправка приветствия в Telegram чат. +Кнопка."""
 
     chat = update.effective_chat
-    bot_name = context.bot['first_name']
+    bot_name = context.bot.first_name
 
-    button = [['Загрузить файл']]
-    reply_markup = ReplyKeyboardMarkup(
+    button = [['загрузить файл']]
+    rep_mar = ReplyKeyboardMarkup(
         button, one_time_keyboard=True, resize_keyboard=True)
+    text = '{} готов к работе!'.format(bot_name)
 
-    context.bot.send_message(chat_id=chat.id,
-                             text='{} готов к работе!'.format(bot_name),
-                             reply_markup=reply_markup)
+    try:
+        context.bot.send_message(chat_id=chat.id, text=text, reply_markup=rep_mar)
+    except Exception:
+        logger.error('Ошибка отправки приветственного сообщения')
+        raise Exception('Ошибка при отправке приветствия')
 
 
 def text_click(update, context):
     """Функция обрабатывает текстовые сообщения."""
 
     chat = update.effective_chat
-    full_name = (update.message.chat.first_name + ' ' +
-                 update.message.chat.last_name)
+    try:
+        if update.message.text == 'загрузить файл':
+            name = update.message.chat.first_name
 
-    if update.message['text'] == 'Загрузить файл':
-        context.bot.send_message(chat_id=chat.id,
-                                 text=f'{full_name}, прикрепи файл в формате '
-                                      f'xlsx и отправь мне. '
-                                      f'Посмотрю, что там у тебя ))')
-    else:
-        context.bot.send_message(chat_id=chat.id,
-                                 text=f'Выбери кнопку "загрузить файл"')
+            text = f'{name}, прикрепи файл в формате xlsx и отправь мне :)'
+            context.bot.send_message(chat_id=chat.id, text=text)
+        else:
+            text = 'Выбери кнопку "загрузить файл"'
+            context.bot.send_message(chat_id=chat.id, text=text)
+    except Exception:
+        logger.error('Ошибка отправки сообщения')
+        raise Exception('Ошибка отправки сообщения')
 
 
 def reed_file_xlsx(user_name, file_name):
     """Функция преобразует xlsx документ в массив данных."""
 
-    xls = pd.ExcelFile(f'temp/@{user_name} {file_name}')
-    sheetX = xls.parse(0)
-    result_arr = []
-    name_columns = [i for i in sheetX]
+    try:
+        xls = pd.ExcelFile(f'temp/@{user_name} {file_name}')
+        sheetX = xls.parse(0)
+        result_arr = []
+        name_columns = [i for i in sheetX]
+    except Exception:
+        raise Exception('Ошибка преобразования xlsx документа')
 
     for line in range(len(sheetX)):
        delta = []
 
        for name_column in name_columns:
            delta.append(sheetX[name_column][line])
-
        result_arr.append(delta)
+
+    logger.info('Массив данных для записи в БД создан')
     return result_arr
 
 
@@ -78,11 +88,16 @@ def write_file_xlsx_database(result_arr):
                      Xpath TEXT,
                      UNIQUE (Name, URL, Xpath));""")
     for row in result_arr:
-        to_db = [row[0], row[1], row[2]]
+        try:
+            to_db = [row[0], row[1], row[2]]
+        except IndexError:
+            raise IndexError('Проверить данные входного файла ' +
+                             'Должно быть три столбца(name, URL, xPath)')
         try:
             curs.execute("INSERT INTO ParsingData VALUES (NULL, ?, ?, ?);", to_db)
         except sqlite3.IntegrityError:
             pass
+    logger.info('Данные успешно записаны в БД')
     conn.commit()
 
 
@@ -92,9 +107,13 @@ def download_file_xlsx(update, context):
     file_name = update.message.document.file_name
     user_name = update.message.chat.username
     file_id = update.message.document.file_id
-
-    new_file = context.bot.get_file(file_id)
-    new_file.download(f'temp/@{user_name} {file_name}')
+    try:
+        new_file = context.bot.get_file(file_id)
+        new_file.download(f'temp/@{user_name} {file_name}')
+    except Exception:
+        raise Exception('Проверить загрузку файла ексель с сервера')
+    else:
+        logger.info('Данные с сервера успешно загружены')
     return user_name, file_name
 
 
@@ -104,6 +123,8 @@ def format_data_list(arr):
     result = ''
     for line in arr:
         result += '  '.join(line) + '\n\n'
+    if not result:
+        raise Exception('Ошибка преобразования данных к строке')
     return result
 
 
@@ -111,32 +132,40 @@ def send_message(update, context, massage):
     """Функция отправки сообщений в Telegram чат."""
 
     chat = update.effective_chat
-    for i in massage:
-        context.bot.send_message(chat_id=chat.id, text=massage[i])
-        time.sleep(2)
+    try:
+        for i in massage:
+            context.bot.send_message(chat_id=chat.id, text=massage[i])
+            time.sleep(3)
 
-    context.bot.send_photo(
-        chat_id=chat.id, photo=open(
-            f'pictures/IMG_{random.randint(MIN_PICTURE, MAX_PICTURE)}.jpg', 'rb'))
+        context.bot.send_photo(
+            chat_id=chat.id, photo=open(
+                f'pictures/IMG_{random.randint(MIN_PICTURE, MAX_PICTURE)}.jpg', 'rb'))
+    except Exception:
+        raise Exception('Ошибка отправки сообщения')
 
 
 def main_handler_file_xlsx(update, context):
     """Главная функция, обрабатывающая xlsx документ."""
 
-    user_name, file_name = download_file_xlsx(update, context)
-    array_data = reed_file_xlsx(user_name, file_name)
-    write_file_xlsx_database(array_data)
-    answer_text = format_data_list(array_data)
+    try:
+        user_name, file_name = download_file_xlsx(update, context)
+        array_data = reed_file_xlsx(user_name, file_name)
+        write_file_xlsx_database(array_data)
+        answer_text = format_data_list(array_data)
 
-    massage = {1: 'Взгляни на обработанные данные:',
-               2: answer_text,
-               3: 'Картинка для настроения :)'}
+        massage = {1: 'Взгляни на обработанные данные:',
+                   2: answer_text,
+                   3: 'Картинка для настроения :)'}
 
-    send_message(update, context, massage)
+        send_message(update, context, massage)
+    except Exception as err:
+        logger.error(err)
+        raise Exception('Ошибка в главном обработчике xlsx документа')
 
 
 def check_tokens():
     """Проверка доступности переменных окружения."""
+
     return BOT_TOKEN
 
 
@@ -144,7 +173,7 @@ def main():
     """Основная логика работы бота."""
 
     if not check_tokens():
-        # logger.critical('Ошибка переменных окружения')
+        logger.critical('Ошибка переменных окружения')
         raise Exception(
             'Ошибка переменных окружения, проверить содержание файла .env')
 
@@ -154,42 +183,32 @@ def main():
     start_handler = CommandHandler('start', wake_up)
     dispatcher.add_handler(start_handler)
 
-    # xlsx_handler = MessageHandler(Filters.document.file_extension("xlsx"), main_handler_file_xlsx)
-    # dispatcher.add_handler(xlsx_handler)
+    message_handler = MessageHandler(Filters.text, text_click)
+    dispatcher.add_handler(message_handler)
 
-    # message_handler = MessageHandler(Filters.text, text_click)
-    # dispatcher.add_handler(message_handler)
+    xlsx_handler = MessageHandler(
+        Filters.document.file_extension("xlsx"), main_handler_file_xlsx)
+    dispatcher.add_handler(xlsx_handler)
 
     updater.start_polling(poll_interval=5)
     updater.idle()
 
 
 if __name__ == '__main__':
+    logging.basicConfig(
+        filename='infra/bot_main.log',
+        level=logging.DEBUG,
+        format=LOG_FORMAT,
+        filemode='w',
+    )
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.DEBUG)
+    handler = FileHandler('infra/bot_home.log')
+    handler2 = StreamHandler(stream=sys.stdout)
+    formatter = logging.Formatter(
+        '%(asctime)s - %(levelname)s - %(message)s - %(funcName)s'
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+
     main()
-
-
-
-
-
-
-# -----------------------------------------------
-
-# result_arr = reed_file_xlsx('boginskiy_di', 'test.xlsx')
-# print(result_arr)
-# write_file_xlsx_database(result_arr)
-
-
-# src = filepath + message.photo[0].file_id
-
-# context.bot.send_document(chat_id=chat.id,
-    #                       document=open('tests/test.xlsx', 'rb'))
-
-# chat_id 5157087725 - Скучковская Скучкова
-# мой чат id 5339853954
-# API бот 5879460590:AAFAfXYX84VM4x-ze2LrSWiMXB9Oi84ELPQ
-# библиотеке python-telegram-bot
-
-# bot = Bot(token='5879460590:AAFAfXYX84VM4x-ze2LrSWiMXB9Oi84ELPQ')
-# chat_id = 5339853954
-# text = "Что-то пришло!"
-# bot.send_message(chat_id, text)
