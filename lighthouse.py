@@ -208,12 +208,6 @@ def main():
 
 
 if __name__ == '__main__':
-    logging.basicConfig(
-        filename='infra/bot_main.log',
-        level=logging.DEBUG,
-        format=LOG_FORMAT,
-        filemode='w',
-    )
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.DEBUG)
     handler = FileHandler('infra/bot_home.log')
