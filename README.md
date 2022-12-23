@@ -22,6 +22,41 @@ Telegram-бот обрабатывает присланный пользоват
 * python-dotenv 0.21.0
 * python-telegram-bot 13.15
 
+### **Быстрый запуск проекта через образ на DockerHub**
+* _Перед запуском у вас должен быть установлен [Docker](https://docs.docker.com/engine/install/ubuntu/)_
+
+Клонировать образ проекта с DockerHub
+```
+sudo docker pull boginskiy/lighthousebot:v1.1
+```
+
+Запустить контейнер с образом
+```
+sudo docker run boginskiy/lighthousebot:v1.1
+```
+
+### **Запуск проекта через Dockerfile**
+Клонировать проект c GitHub
+```
+git clone git@github.com:boginskiy/LightHouseBot.git
+```
+
+Задать свои переменные окружения. Подробности в _"Шаблон наполнения env-файла"_
+```
+ENV BOT_TOKEN '5879466790:AAFAfXYX84VM4x-ze2LrSWiMXB9Oi84ELPQ'
+ENV ID_ADMIN 5339343954
+```
+
+Собрать образ проекта. Команда выполняется с корневой директории.
+```
+sudo docker build -t <имя_проекта> .
+```
+
+Запустить контейнер с образом
+```
+sudo docker run <имя_проекта>
+```
+
 ### **Шаблон наполнения env-файла**
 Ознакомьтесь с **.env.example** файлом. На его основе со своими данными создайте **.env** файл в директории проекта.
 
@@ -40,7 +75,7 @@ BOT_TOKEN = '5879439590:AAFAfXYX84VM4x-ze2LrSWiMXB9Oi84ELPQ'
 ID_ADMIN = 5339829954
 ```
 
-### **Запуск проекта на Linux**
+### **Запуск проекта в dev режиме на Linux**
 Клонировать проект c GitHub
 ```
 git clone git@github.com:boginskiy/LightHouseBot.git

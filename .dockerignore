@@ -1,0 +1,6 @@
+.gitignore
+.Dockerfile
+.LICENSE
+.README.md
+.test
+venv/
